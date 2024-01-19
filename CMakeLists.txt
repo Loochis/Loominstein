@@ -3,6 +3,8 @@ project(Loominstein)
 
 set(CMAKE_CXX_STANDARD 14)
 
+find_package(Curses REQUIRED)
+include_directories(${CURSES_INCLUDE_DIR})
 include_directories(.)
 
 add_library(AsciiChis asciichis.cpp asciichis.h)
@@ -13,4 +15,4 @@ add_executable(Loominstein
         asciichis.h
         main.cpp)
 
-target_link_libraries(Loominstein PRIVATE AsciiChis MathChis)
+target_link_libraries(Loominstein PRIVATE ${CURSES_LIBRARIES} AsciiChis MathChis)
