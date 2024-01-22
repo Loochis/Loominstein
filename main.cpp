@@ -16,11 +16,15 @@ using namespace MATHCHIS;
 
 #define FIELD_OF_VIEW 100.0
 
+#define X_POS_LIGHT 1
+#define X_NEG_LIGHT 0.6
+#define Y_POS_LIGHT 0.8
+#define Y_NEG_LIGHT 0.4
+
 asciirenderer rend;
 int testCol;
 
 std::thread *threads;
-vector *ray_origins;
 vector *ray_dirs;
 
 matrix view_matrix = matrix(3,3);
@@ -36,9 +40,14 @@ float fixed_mod(float a, float N) {return a - N*floor(a/N);} //return in range [
 void castline(int line) {
 
     vector cast_dir = ray_dirs[line] * rotate_matrix;
-    vector cast_pos = ray_origins[line] * rotate_matrix + player_pos;
+    vector cast_pos = player_pos;
+
+    cast_dir.elems[2] = 0;
+
     int hits = 0;
     float distance = 0;
+    float fisheye_factor = vector::dot(cast_dir, player_dir);
+    float brightness = 1;
 
     bool x_positive = cast_dir.elems[0] > 0;
     bool y_positive = cast_dir.elems[1] > 0;
@@ -56,9 +65,11 @@ void castline(int line) {
         float t_y = y_dist / cast_dir.elems[1];
 
         if (t_x < t_y) {
-            col.elems[0] = 1; col.elems[1] = 0;
+            if (x_positive) brightness = X_POS_LIGHT;
+            else            brightness = X_NEG_LIGHT;
         } else {
-            col.elems[0] = 0; col.elems[1] = 1;
+            if (y_positive) brightness = Y_POS_LIGHT;
+            else            brightness = Y_NEG_LIGHT;
         }
 
         float t = fmin(t_x, t_y);
@@ -66,13 +77,13 @@ void castline(int line) {
         float delta_x = cast_dir.elems[0]*(t+0.002f);
         float delta_y = cast_dir.elems[1]*(t+0.002f);
 
-        distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2));
+        distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2)) * fisheye_factor;
         cast_pos.elems[0] += delta_x;
         cast_pos.elems[1] += delta_y;
 
         hits++;
 
-        if (distance > 2)
+        if (hits > 3)
             break;
     }
 
@@ -84,7 +95,7 @@ void castline(int line) {
         if (m_i < -max || m_i > max)
             rend.setpix(line, i, vector(0).col_tobytes());
         else
-            rend.setpix(line, i, col.col_tobytes());
+            rend.setpix(line, i, vector(brightness).col_tobytes());
     }
 }
 
@@ -171,7 +182,6 @@ int main () {
     rend = asciirenderer();
     threads = (std::thread*)malloc(rend.width * sizeof(std::thread));
     ray_dirs = (vector*)malloc(rend.width * sizeof(vector));
-    ray_origins = (vector*)malloc(rend.width * sizeof(vector));
 
     std::vector<float> rotate_vec {1, 1, 0, 1, 1, 0, 0, 0, 1};
     std::vector<float> transl_vec {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -182,10 +192,7 @@ int main () {
     // Precompute ray directions (use the transform matrix to change view dir)
     for (int i = 0; i < rend.width; i++) {
         double dir_angle = (FIELD_OF_VIEW * (M_PI / 180.0)) * ((i - (rend.width / 2.0)) / rend.width);
-        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 0);
-        ray_origins[i] = ray_dirs[i] / vector::dot(ray_dirs[i], vector(0, 1, 0));
-        ray_dirs[i].elems[2] = 1;
-        ray_origins[i].elems[2] = 1;
+        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 1);
     }
 
     set_translation(player_pos);
@@ -195,7 +202,6 @@ int main () {
     double angle = 0;
 
     free(ray_dirs);
-    free(ray_origins);
     free(threads);
 
     exit(0);
