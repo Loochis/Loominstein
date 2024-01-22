@@ -20,18 +20,24 @@ asciirenderer rend;
 int testCol;
 
 std::thread *threads;
+vector *ray_origins;
 vector *ray_dirs;
 
 matrix view_matrix = matrix(3,3);
 matrix rotate_matrix = matrix(3,3);
 matrix transl_matrix = matrix(3,3);
 
-vector player_pos = vector(0.1, 0.1, 1);
+vector player_pos = vector(0, 0, 1);
+vector player_dir = vector(0, 1, 0);
+
+// FIX FLOAT MODULO FOR NEGATIVE NUMBERS
+float fixed_mod(float a, float N) {return a - N*floor(a/N);} //return in range [0, N)
 
 void castline(int line) {
 
     vector cast_dir = ray_dirs[line] * rotate_matrix;
-    vector cast_pos = vector(player_pos.elems);
+    vector cast_pos = ray_origins[line] * rotate_matrix + player_pos;
+    int hits = 0;
     float distance = 0;
 
     bool x_positive = cast_dir.elems[0] > 0;
@@ -40,30 +46,37 @@ void castline(int line) {
     vector col = vector(0);
 
     for (int i = 0; i < 100; i++) {
-        float x_dist = fmod(cast_pos.elems[0], 1.0);
-        float y_dist = fmod(cast_pos.elems[1], 1.0);
-        if (x_positive) x_dist = 1-x_dist;
-        if (y_positive) y_dist = 1-y_dist;
+        float x_dist = -fixed_mod(cast_pos.elems[0], 1.0f);
+        float y_dist = -fixed_mod(cast_pos.elems[1], 1.0f);
 
-        float t_x = abs(x_dist / cast_dir.elems[1]);
-        float t_y = abs(y_dist / cast_dir.elems[0]);
+        if (x_positive) x_dist = 1+x_dist;
+        if (y_positive) y_dist = 1+y_dist;
 
-        float dist_travelled;
+        float t_x = x_dist / cast_dir.elems[0];
+        float t_y = y_dist / cast_dir.elems[1];
 
         if (t_x < t_y) {
-            dist_travelled = sqrt(pow(cast_dir.elems[0]*t_x, 2) + pow(cast_dir.elems[1]*t_x, 2));
-            col.elems[0] = 1;
+            col.elems[0] = 1; col.elems[1] = 0;
         } else {
-            dist_travelled = sqrt(pow(cast_dir.elems[0]*t_y, 2) + pow(cast_dir.elems[1]*t_y, 2));
-            col.elems[1] = 1;
+            col.elems[0] = 0; col.elems[1] = 1;
         }
 
-        distance += dist_travelled;
+        float t = fmin(t_x, t_y);
 
-        break;
+        float delta_x = cast_dir.elems[0]*(t+0.002f);
+        float delta_y = cast_dir.elems[1]*(t+0.002f);
+
+        distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2));
+        cast_pos.elems[0] += delta_x;
+        cast_pos.elems[1] += delta_y;
+
+        hits++;
+
+        if (hits > 3)
+            break;
     }
 
-    float max = (float)rend.height/2 - 10;
+    float max = (float)rend.height/2;
     max /= (distance);
 
     for (int i = 0; i < rend.height; i++) {
@@ -113,6 +126,12 @@ void game_loop() {
     while (true) {
         int kb = kbhit();
         switch (kb) {
+            case(1):
+                player_pos += player_dir*0.2;
+                break;
+            case(2):
+                player_pos -= player_dir*0.2;
+                break;
             case(3):
                 angle += 0.1;
                 break;
@@ -125,6 +144,8 @@ void game_loop() {
         if (kb) refresh();
 
         set_rotation(angle);
+        player_dir.elems[0] = -sin(angle);
+        player_dir.elems[1] = cos(angle);
 
         for (int i = 0; i < rend.width; i++) {
             threads[i] = std::thread(castline, i);
@@ -150,6 +171,7 @@ int main () {
     rend = asciirenderer();
     threads = (std::thread*)malloc(rend.width * sizeof(std::thread));
     ray_dirs = (vector*)malloc(rend.width * sizeof(vector));
+    ray_origins = (vector*)malloc(rend.width * sizeof(vector));
 
     std::vector<float> rotate_vec {1, 1, 0, 1, 1, 0, 0, 0, 1};
     std::vector<float> transl_vec {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -160,7 +182,10 @@ int main () {
     // Precompute ray directions (use the transform matrix to change view dir)
     for (int i = 0; i < rend.width; i++) {
         double dir_angle = (FIELD_OF_VIEW * (M_PI / 180.0)) * ((i - (rend.width / 2.0)) / rend.width);
-        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 1);
+        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 0);
+        ray_origins[i] = ray_dirs[i] / vector::dot(ray_dirs[i], vector(0, 1, 0));
+        ray_dirs[i].elems[2] = 1;
+        ray_origins[i].elems[2] = 1;
     }
 
     set_translation(player_pos);
@@ -170,6 +195,7 @@ int main () {
     double angle = 0;
 
     free(ray_dirs);
+    free(ray_origins);
     free(threads);
 
     exit(0);
