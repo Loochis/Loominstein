@@ -2,8 +2,8 @@
 // Created by loochis on 15/01/24.
 //
 
-#include <asciichis.h>
-#include <mathchis.h>
+#include <lib/asciichis/asciichis.h>
+#include <lib/mathchis/mathchis.h>
 
 #include <stdio.h>
 #include <iostream>
