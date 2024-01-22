@@ -72,7 +72,7 @@ void castline(int line) {
 
         hits++;
 
-        if (hits > 3)
+        if (distance > 2)
             break;
     }
 
