@@ -9,6 +9,7 @@ namespace ASCIICHIS {
 
     class asciirenderer {
     public:
+        bool dither_enable = false;
         int width;
         int height;
         int width_c;
@@ -30,7 +31,7 @@ namespace ASCIICHIS {
 
         volatile int* vram;
     private:
-
+        bool dither_state = false;
         volatile int idxfromcoord(int x, int y);
         int coordfromidx(int i, int& x, int& y);
     };

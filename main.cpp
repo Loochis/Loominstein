@@ -7,14 +7,16 @@
 
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include <ncurses.h>
 #include <math.h>
+#include <string.h>
 
 using namespace ASCIICHIS;
 using namespace MATHCHIS;
 
-#define FIELD_OF_VIEW 100.0
+#define FIELD_OF_VIEW 90.0
 
 #define X_POS_LIGHT 1
 #define X_NEG_LIGHT 0.6
@@ -22,20 +24,72 @@ using namespace MATHCHIS;
 #define Y_NEG_LIGHT 0.4
 
 asciirenderer rend;
-int testCol;
 
 std::thread *threads;
 vector *ray_dirs;
+float *fisheye_factor;
 
 matrix view_matrix = matrix(3,3);
 matrix rotate_matrix = matrix(3,3);
 matrix transl_matrix = matrix(3,3);
 
-vector player_pos = vector(0, 0, 1);
+vector player_pos = vector(0.5, 0.5, 1);
 vector player_dir = vector(0, 1, 0);
 
+vector colors[] = {vector(0,0,0),vector(1,1,1), vector(0.5,1,1), vector(1,0.2,0.2)};
+
+int map_width = 0;
+int map_height = 0;
+int* map;
+
 // FIX FLOAT MODULO FOR NEGATIVE NUMBERS
-float fixed_mod(float a, float N) {return a - N*floor(a/N);} //return in range [0, N)
+float fixed_mod(float a, float N) {
+    return a - N*floor(a/N);
+} //return in range [0, N)
+
+int* loadmap(std::string map_path) {
+    free(map);
+
+    std::ifstream mapfile (map_path);
+    if (!mapfile.is_open()) exit(1);
+
+    std::string line_wh;
+    std::string line_sp;
+    getline(mapfile, line_wh);
+    getline(mapfile, line_sp);
+
+    int decimal_coef = 1;
+    int line_w=0, line_h=0, start_x=0, start_y=0;
+
+    // Convert string representation of decimal into decimal number
+    for (int i = 3; i >= 0; i--) {
+        line_w  += decimal_coef*(line_wh[i]   - 48);
+        line_h  += decimal_coef*(line_wh[i+5] - 48);
+        start_x += decimal_coef*(line_sp[i]   - 48);
+        start_y += decimal_coef*(line_sp[i+5] - 48);
+        decimal_coef *= 10;
+    }
+
+    map_width  = line_w;
+    map_height = line_h;
+    player_pos.elems[0] = start_x;
+    player_pos.elems[1] = start_y;
+    map = (int*)malloc(line_w * line_h * sizeof(int));
+
+    // fill contents of map
+    // ROW MAJOR MAP CONTENTS
+    std::string map_line_str;
+    int map_idx = 0;
+    for (int y = 0; y < map_height; y++) {
+        getline(mapfile, map_line_str);
+        for (int x = 0; x < map_width; x++) {
+            map[map_idx] = map_line_str[x]-48;
+            map_idx++;
+        }
+    }
+
+    return map;
+}
 
 void castline(int line) {
 
@@ -44,9 +98,10 @@ void castline(int line) {
 
     cast_dir.elems[2] = 0;
 
-    int hits = 0;
+    int cell_x = floor(player_pos.elems[0]);
+    int cell_y = floor(player_pos.elems[1]);
+
     float distance = 0;
-    float fisheye_factor = vector::dot(cast_dir, player_dir);
     float brightness = 1;
 
     bool x_positive = cast_dir.elems[0] > 0;
@@ -54,9 +109,15 @@ void castline(int line) {
 
     vector col = vector(0);
 
+    int map_pos = 0;
+
     for (int i = 0; i < 100; i++) {
-        float x_dist = -fixed_mod(cast_pos.elems[0], 1.0f);
-        float y_dist = -fixed_mod(cast_pos.elems[1], 1.0f);
+        float x_dist, y_dist;
+        x_dist = -fixed_mod(cast_pos.elems[0], 1.0f);
+        y_dist = -fixed_mod(cast_pos.elems[1], 1.0f);
+
+        if (!x_positive && x_dist == -0) x_dist = -1;
+        if (!y_positive && y_dist == -0) y_dist = -1;
 
         if (x_positive) x_dist = 1+x_dist;
         if (y_positive) y_dist = 1+y_dist;
@@ -64,27 +125,31 @@ void castline(int line) {
         float t_x = x_dist / cast_dir.elems[0];
         float t_y = y_dist / cast_dir.elems[1];
 
-        if (t_x < t_y) {
-            if (x_positive) brightness = X_POS_LIGHT;
-            else            brightness = X_NEG_LIGHT;
-        } else {
-            if (y_positive) brightness = Y_POS_LIGHT;
-            else            brightness = Y_NEG_LIGHT;
-        }
-
         float t = fmin(t_x, t_y);
 
-        float delta_x = cast_dir.elems[0]*(t+0.002f);
-        float delta_y = cast_dir.elems[1]*(t+0.002f);
 
-        distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2)) * fisheye_factor;
+        if (t_x < t_y) {
+            if (x_positive) {cell_x++; brightness = X_POS_LIGHT;}
+            else            {cell_x--; brightness = X_NEG_LIGHT;}
+        } else {
+            if (y_positive) {cell_y++; brightness = Y_POS_LIGHT;}
+            else            {cell_y--; brightness = Y_NEG_LIGHT;}
+        }
+
+        float delta_x = cast_dir.elems[0]*t;
+        float delta_y = cast_dir.elems[1]*t;
+
+        distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2)) * fisheye_factor[line];
         cast_pos.elems[0] += delta_x;
         cast_pos.elems[1] += delta_y;
 
-        hits++;
+        map_pos = map[cell_x + cell_y*map_width];
 
-        if (hits > 3)
+        if (map_pos)
             break;
+
+        if (cell_x < 0 || cell_x > map_width || cell_y < 0  || cell_y > map_height)
+            continue;
     }
 
     float max = (float)rend.height/2;
@@ -93,9 +158,9 @@ void castline(int line) {
     for (int i = 0; i < rend.height; i++) {
         int m_i = i - rend.height/2;
         if (m_i < -max || m_i > max)
-            rend.setpix(line, i, vector(0).col_tobytes());
+            rend.setpix(line, i, vector(0,0,0.6).col_tobytes());
         else
-            rend.setpix(line, i, vector(brightness).col_tobytes());
+            rend.setpix(line, i, (colors[map_pos]*brightness).col_tobytes());
     }
 }
 
@@ -106,6 +171,8 @@ void set_rotation(double angle) {
     rotate_matrix.elems[1] = s_a;
     rotate_matrix.elems[3] = -s_a;
     rotate_matrix.elems[4] = c_a;
+
+    player_dir = vector(-s_a, c_a, 1);
 }
 
 void set_translation(vector pos) {
@@ -155,8 +222,6 @@ void game_loop() {
         if (kb) refresh();
 
         set_rotation(angle);
-        player_dir.elems[0] = -sin(angle);
-        player_dir.elems[1] = cos(angle);
 
         for (int i = 0; i < rend.width; i++) {
             threads[i] = std::thread(castline, i);
@@ -172,16 +237,21 @@ void game_loop() {
 }
 
 int main () {
+
+    loadmap("maps/map01.txt");
+
     initscr();
 
     cbreak();
     noecho();
     nodelay(stdscr, TRUE);
-    //scrollok(stdscr, TRUE);
 
     rend = asciirenderer();
+    rend.dither_enable = true;
+
     threads = (std::thread*)malloc(rend.width * sizeof(std::thread));
     ray_dirs = (vector*)malloc(rend.width * sizeof(vector));
+    fisheye_factor = (float*) malloc(rend.width * sizeof(float));
 
     std::vector<float> rotate_vec {1, 1, 0, 1, 1, 0, 0, 0, 1};
     std::vector<float> transl_vec {1, 0, 0, 0, 1, 0, 0, 0, 1};
@@ -192,14 +262,14 @@ int main () {
     // Precompute ray directions (use the transform matrix to change view dir)
     for (int i = 0; i < rend.width; i++) {
         double dir_angle = (FIELD_OF_VIEW * (M_PI / 180.0)) * ((i - (rend.width / 2.0)) / rend.width);
-        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 1);
+        ray_dirs[i] = vector(sin(dir_angle), cos(dir_angle), 0);
+        fisheye_factor[i] = vector::dot(ray_dirs[i], player_dir);
+        ray_dirs[i].elems[2] = 1;
     }
 
     set_translation(player_pos);
 
     game_loop();
-
-    double angle = 0;
 
     free(ray_dirs);
     free(threads);
