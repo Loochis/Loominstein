@@ -5,6 +5,8 @@
 #ifndef ASCII_RENDER_ASCIICHIS_H
 #define ASCII_RENDER_ASCIICHIS_H
 
+#include <cstdint>
+
 namespace ASCIICHIS {
 
     class asciirenderer {
@@ -20,18 +22,18 @@ namespace ASCIICHIS {
         asciirenderer();
         ~asciirenderer();
 
-        static int bytetocol(int col, unsigned char& r, unsigned char& g, unsigned char& b);
+        static int bytetocol(uint32_t col, unsigned char& r, unsigned char& g, unsigned char& b);
 
-        volatile int setpix(int x, int y, int col);
+        volatile int setpix(int x, int y, uint32_t col);
         int getpix(int x, int y);
-        int drawbox(int x1, int y1, int x2, int y2, int col);
+        int drawbox(int x1, int y1, int x2, int y2, uint32_t col);
 
         int pushscreen();
         int flushscreen();
 
-        volatile int* vram;
+        volatile uint32_t* vram;
     private:
-        bool dither_state = false;
+        int dither_state = 0;
         volatile int idxfromcoord(int x, int y);
         int coordfromidx(int i, int& x, int& y);
     };

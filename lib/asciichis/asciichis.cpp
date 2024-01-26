@@ -37,7 +37,7 @@ namespace ASCIICHIS {
         width_c = width/2;
         height_c = height/2;
 
-        vram = (int*)calloc(width*height, sizeof(int));
+        vram = (uint32_t*)calloc(width*height, sizeof(uint32_t));
 
         // Disable the cursor
         printf("\033[?25l");
@@ -45,14 +45,14 @@ namespace ASCIICHIS {
 
     asciirenderer::~asciirenderer() = default;
 
-    int asciirenderer::bytetocol(int col, unsigned char &r, unsigned char &g, unsigned char &b) {
+    int asciirenderer::bytetocol(uint32_t col, unsigned char &r, unsigned char &g, unsigned char &b) {
         r = (unsigned char)(col & 0xFF);
         g = (unsigned char)((col >> 8) & 0xFF);
         b = (unsigned char)((col >> 16) & 0xFF);
         return 0;
     }
 
-    volatile int asciirenderer::setpix(int x, int y, int col) {
+    volatile int asciirenderer::setpix(int x, int y, uint32_t col) {
         if (x < 0 || x >= width || y < 0 || y >= height)
             return 1;
         vram[idxfromcoord(x, y)] = col;
@@ -63,7 +63,7 @@ namespace ASCIICHIS {
         return vram[idxfromcoord(x, y)];
     }
 
-    int asciirenderer::drawbox(int x1, int y1, int x2, int y2, int col) {
+    int asciirenderer::drawbox(int x1, int y1, int x2, int y2, uint32_t col) {
         for (int x = x1; x < x2; x++) {
             //float xPerc = (float)(x-x1) / (float)(x2-x1);
             for (int y = y1; y < y2; y++) {
@@ -108,7 +108,8 @@ namespace ASCIICHIS {
             }
         }
 
-        dither_state = !dither_state;
+        dither_state++;
+        dither_state %= 2;
 
         //for (int i = 0; i < width*height; i++) {
         //    bytetocol(vram[i], r, g, b);

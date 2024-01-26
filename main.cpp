@@ -4,6 +4,7 @@
 
 #include <lib/asciichis/asciichis.h>
 #include <lib/mathchis/mathchis.h>
+#include "lib/texturechis/texture.h"
 
 #include <stdio.h>
 #include <iostream>
@@ -41,6 +42,9 @@ vector colors[] = {vector(0,0,0),vector(1,1,1), vector(0.5,1,1), vector(1,0.2,0.
 int map_width = 0;
 int map_height = 0;
 int* map;
+
+// TEXTURES
+texture tex0 = texture("textures/cobble.bin");
 
 // FIX FLOAT MODULO FOR NEGATIVE NUMBERS
 float fixed_mod(float a, float N) {
@@ -110,6 +114,7 @@ void castline(int line) {
     vector col = vector(0);
 
     int map_pos = 0;
+    float x_samp = 0;
 
     for (int i = 0; i < 100; i++) {
         float x_dist, y_dist;
@@ -128,13 +133,7 @@ void castline(int line) {
         float t = fmin(t_x, t_y);
 
 
-        if (t_x < t_y) {
-            if (x_positive) {cell_x++; brightness = X_POS_LIGHT;}
-            else            {cell_x--; brightness = X_NEG_LIGHT;}
-        } else {
-            if (y_positive) {cell_y++; brightness = Y_POS_LIGHT;}
-            else            {cell_y--; brightness = Y_NEG_LIGHT;}
-        }
+
 
         float delta_x = cast_dir.elems[0]*t;
         float delta_y = cast_dir.elems[1]*t;
@@ -142,6 +141,14 @@ void castline(int line) {
         distance += fsqrt(pow(delta_x, 2) + pow(delta_y, 2)) * fisheye_factor[line];
         cast_pos.elems[0] += delta_x;
         cast_pos.elems[1] += delta_y;
+
+        if (t_x < t_y) {
+            if (x_positive) {cell_x++; brightness = X_POS_LIGHT; x_samp = fixed_mod(cast_pos.elems[1], 1.0f);}
+            else            {cell_x--; brightness = X_NEG_LIGHT; x_samp = fixed_mod(cast_pos.elems[1], 1.0f);}
+        } else {
+            if (y_positive) {cell_y++; brightness = Y_POS_LIGHT; x_samp = fixed_mod(cast_pos.elems[0], 1.0f);}
+            else            {cell_y--; brightness = Y_NEG_LIGHT; x_samp = fixed_mod(cast_pos.elems[0], 1.0f);}
+        }
 
         map_pos = map[cell_x + cell_y*map_width];
 
@@ -152,16 +159,42 @@ void castline(int line) {
             continue;
     }
 
-    float max = (float)rend.height/2;
-    max /= (distance);
+    float wall_size = (float)rend.height / distance;
+    int wall_size_i = (int)round(wall_size);
+    // Clamp wall size
+    if (wall_size_i < 0)
+        wall_size_i = 0;
+    if (wall_size_i >= rend.height)
+        wall_size_i = rend.height - 1;
 
-    for (int i = 0; i < rend.height; i++) {
-        int m_i = i - rend.height/2;
-        if (m_i < -max || m_i > max)
-            rend.setpix(line, i, vector(0,0,0.6).col_tobytes());
-        else
-            rend.setpix(line, i, (colors[map_pos]*brightness).col_tobytes());
+    int empt_size_i = (rend.height - wall_size_i) / 2;
+
+    int overscan = (int)round(wall_size) - wall_size_i;
+
+    int ctr = 0;
+    float y_samp = 0;
+
+    for (int i = 0; i < empt_size_i; i++) {
+        rend.setpix(line, ctr, 0x00000000);
+        ctr++;
     }
+    for (int i = 0; i < wall_size_i; i++) {
+        y_samp = (float)i / wall_size;
+        rend.setpix(line, ctr, (tex0.sample_tex(x_samp, y_samp) * brightness).col_tobytes());
+        ctr++;
+    }
+    for (int i = 0; ctr < rend.height; i++) {
+        rend.setpix(line, ctr, 0x00000000);
+        ctr++;
+    }
+
+    //for (int i = 0; i < rend.height; i++) {
+    //    int m_i = i - rend.height/2;
+    //    if (m_i < -max || m_i > max)
+    //        rend.setpix(line, i, 0x00000000);
+    //    else
+    //        rend.setpix(line, i, (tex0.sample_tex(x_samp, y_samp)));
+    //}
 }
 
 void set_rotation(double angle) {
@@ -237,6 +270,14 @@ void game_loop() {
 }
 
 int main () {
+
+    //for (int i = 0; i < 10; i++) {
+    //    printf("0x%08x\n", tex0.tex_data[i]);
+    //    u_char r, g, b;
+    //    asciirenderer::bytetocol(tex0.tex_data[i], r, g, b);
+    //    printf("0x%02x, 0x%02x, 0x%02x\n", r, g, b);
+    //}
+    //exit (0);
 
     loadmap("maps/map01.txt");
 
