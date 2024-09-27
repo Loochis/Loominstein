@@ -2,6 +2,7 @@
 // Created by loochis on 23/01/24.
 //
 
+#include <cstdint>
 #include <string>
 #include "../mathchis/mathchis.h"
 

@@ -175,7 +175,7 @@ void castline(int line) {
     float y_samp = 0;
 
     for (int i = 0; i < empt_size_i; i++) {
-        rend.setpix(line, ctr, 0x00000000);
+        rend.setpix(line, ctr, 0x000077FF);
         ctr++;
     }
     for (int i = 0; i < wall_size_i; i++) {
@@ -184,7 +184,7 @@ void castline(int line) {
         ctr++;
     }
     for (int i = 0; ctr < rend.height; i++) {
-        rend.setpix(line, ctr, 0x00000000);
+        rend.setpix(line, ctr, 0x00FF0000);
         ctr++;
     }
 
